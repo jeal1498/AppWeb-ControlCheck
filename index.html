@@ -342,6 +342,7 @@
         const Palette = (props) => <IconBase {...props}><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></IconBase>;
         const CheckSquare = (props) => <IconBase {...props}><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></IconBase>;
         const Square = (props) => <IconBase {...props}><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/></IconBase>;
+        const Shield = (props) => <IconBase {...props}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></IconBase>;
         
         const StarFilled = ({ size = 24, className = "" }) => (
             <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -557,12 +558,6 @@
         const validateDate = (dateStr) => {
             if (!dateStr) return { valid: false, error: 'La fecha es requerida' };
             const date = new Date(dateStr + "T00:00:00");
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            
-            if (date > today) {
-                return { valid: false, error: 'No se pueden crear registros de fechas futuras' };
-            }
             
             if (date.getFullYear() !== 2026) {
                 return { valid: false, error: 'Solo se permiten fechas del año 2026' };
@@ -574,73 +569,102 @@
         // ============================================
         // FUNCIONES DE EXPORTACIÓN
         // ============================================
-        const exportToCSV = (records, includeSalary = true, includeCommissions = true, includeExpenses = true) => {
+        const exportToCSV = (records, includeSalary = true, includeCommissions = true, includeExpenses = true, periodLabel = 'Personalizado') => {
             try {
-                if (!includeSalary && !includeCommissions) {
-                    return false; // No hay nada que exportar
+                if (!includeCommissions) {
+                    // Si no incluye comisiones, usar formato tradicional
+                    const headers = ['Fecha', 'Estado', 'Unidad'];
+                    
+                    if (includeSalary) headers.push('Salario Base');
+                    if (includeExpenses) headers.push('Gastos');
+                    headers.push('Total');
+                    
+                    const csvRows = [headers.join(',')];
+                    
+                    records.forEach(record => {
+                        const row = [
+                            record.date,
+                            STATUS_LABELS[record.status],
+                            record.unit || 'OFICINA'
+                        ];
+                        
+                        if (includeSalary) row.push(record.baseSalary.toFixed(2));
+                        if (includeExpenses) row.push(record.totalExp.toFixed(2));
+                        
+                        const total = (includeSalary ? record.baseSalary : 0) - (includeExpenses ? record.totalExp : 0);
+                        row.push(total.toFixed(2));
+                        
+                        csvRows.push(row.join(','));
+                    });
+                    
+                    const csvContent = csvRows.join('\n');
+                    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement('a');
+                    const url = URL.createObjectURL(blob);
+                    link.setAttribute('href', url);
+                    link.setAttribute('download', `ControlCheck_Nomina_${new Date().toISOString().split('T')[0]}.csv`);
+                    link.style.visibility = 'hidden';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    
+                    return true;
                 }
                 
-                const headers = ['Fecha', 'Estado', 'Unidad'];
-                
-                if (includeSalary) {
-                    headers.push('Salario Base');
-                }
-                if (includeCommissions) {
-                    headers.push('Comisiones');
-                }
-                if (includeExpenses) {
-                    headers.push('Gastos');
-                }
-                
-                headers.push('Total', 'Hora Inicio', 'Hora Fin', 'Horas', 'Descripción');
-                
-                const csvRows = [headers.join(',')];
-                
-                records.forEach(record => {
-                    const row = [
-                        record.date,
-                        STATUS_LABELS[record.status],
-                        record.unit || 'OFICINA'
-                    ];
-                    
-                    if (includeSalary) {
-                        row.push(record.baseSalary.toFixed(2));
-                    }
-                    if (includeCommissions) {
-                        row.push(record.totalComm.toFixed(2));
-                    }
-                    if (includeExpenses) {
-                        row.push(record.totalExp.toFixed(2));
-                    }
-                    
-                    const total = (includeSalary ? record.baseSalary : 0) + 
-                                  (includeCommissions ? record.totalComm : 0) - 
-                                  (includeExpenses ? record.totalExp : 0);
-                    
-                    row.push(
-                        total.toFixed(2),
-                        record.startTime || 'N/A',
-                        record.endTime || 'N/A',
-                        record.hoursWorked ? record.hoursWorked.toFixed(2) : 'N/A',
-                        `"${(record.description || '').replace(/"/g, '""')}"`
-                    );
-                    
-                    csvRows.push(row.join(','));
+                // FORMATO NUEVO PARA COMISIONES (según imagen)
+                const exportDate = new Date().toLocaleDateString('es-MX', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
                 });
                 
-                const csvContent = csvRows.join('\n');
+                // Calcular totales
+                let totalComisiones = 0;
+                let foliosCount = 0;
+                
+                // Crear filas con cada comisión individual
+                const dataRows = [];
+                records.forEach(record => {
+                    if (record.commissions && record.commissions.length > 0) {
+                        record.commissions.forEach(comm => {
+                            if (comm.amount && parseFloat(comm.amount) > 0) {
+                                dataRows.push({
+                                    fecha: new Date(record.date + "T00:00:00").toLocaleDateString('es-MX'),
+                                    unidad: record.unit || 'OFICINA',
+                                    folio: comm.folio || record.id || 'N/A',
+                                    concepto: comm.name || 'Comisión',
+                                    comision: parseFloat(comm.amount)
+                                });
+                                totalComisiones += parseFloat(comm.amount);
+                                foliosCount++;
+                            }
+                        });
+                    }
+                });
+                
+                // Construir CSV
+                const csvLines = [];
+                csvLines.push('ControlCheck');
+                csvLines.push(`Fecha:,${exportDate}`);
+                csvLines.push('');
+                csvLines.push('Nombre:,ALVARADO LOPEZ JOSE EDUARDO');
+                csvLines.push('ID:,15724');
+                csvLines.push(`Periodo:,${periodLabel}`);
+                csvLines.push(`Folios:,${foliosCount}`);
+                csvLines.push(`Total:,$${totalComisiones.toFixed(2)}`);
+                csvLines.push('');
+                csvLines.push('Fecha,Unidad,ID / Folio,Concepto,Comisión');
+                
+                dataRows.forEach(row => {
+                    csvLines.push(`${row.fecha},${row.unidad},${row.folio},${row.concepto},$${row.comision.toFixed(2)}`);
+                });
+                
+                const csvContent = csvLines.join('\n');
                 const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
                 const link = document.createElement('a');
                 const url = URL.createObjectURL(blob);
                 link.setAttribute('href', url);
-                
-                const parts = [];
-                if (includeSalary) parts.push('Nomina');
-                if (includeCommissions) parts.push('Comisiones');
-                if (!includeExpenses) parts.push('SinGastos');
-                const exportType = parts.length > 0 ? parts.join('_') : 'Completo';
-                
-                link.setAttribute('download', `ControlCheck_${exportType}_${new Date().toISOString().split('T')[0]}.csv`);
+                link.setAttribute('download', `ControlCheck_Comisiones_${new Date().toISOString().split('T')[0]}.csv`);
                 link.style.visibility = 'hidden';
                 document.body.appendChild(link);
                 link.click();
@@ -653,106 +677,156 @@
             }
         };
 
-        const exportToPDF = (records, totals, includeSalary = true, includeCommissions = true, includeExpenses = true) => {
+        const exportToPDF = (records, totals, includeSalary = true, includeCommissions = true, includeExpenses = true, periodLabel = 'Personalizado') => {
             try {
-                if (!includeSalary && !includeCommissions) {
-                    return false; // No hay nada que exportar
+                if (!includeCommissions) {
+                    // Formato tradicional para nómina
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF();
+                    
+                    doc.setFontSize(20);
+                    doc.setFont(undefined, 'bold');
+                    doc.text('ControlCheck - Nómina', 105, 20, { align: 'center' });
+                    
+                    doc.setFontSize(10);
+                    doc.setFont(undefined, 'normal');
+                    doc.text(`Fecha: ${new Date().toLocaleDateString('es-MX')}`, 105, 28, { align: 'center' });
+                    
+                    const headers = ['Fecha', 'Estado', 'Unidad'];
+                    if (includeSalary) headers.push('Salario');
+                    if (includeExpenses) headers.push('Gastos');
+                    headers.push('Total');
+                    
+                    const tableData = records.map(record => {
+                        const row = [
+                            new Date(record.date + "T00:00:00").toLocaleDateString('es-MX'),
+                            STATUS_LABELS[record.status],
+                            record.unit || 'OFICINA'
+                        ];
+                        
+                        if (includeSalary) row.push(`$${record.baseSalary.toFixed(2)}`);
+                        if (includeExpenses) row.push(`$${record.totalExp.toFixed(2)}`);
+                        
+                        const total = (includeSalary ? record.baseSalary : 0) - (includeExpenses ? record.totalExp : 0);
+                        row.push(`$${total.toFixed(2)}`);
+                        
+                        return row;
+                    });
+                    
+                    doc.autoTable({
+                        head: [headers],
+                        body: tableData,
+                        startY: 35,
+                        theme: 'grid',
+                        headStyles: { fillColor: [16, 185, 129] },
+                        styles: { fontSize: 8 }
+                    });
+                    
+                    doc.save(`ControlCheck_Nomina_${new Date().toISOString().split('T')[0]}.pdf`);
+                    return true;
                 }
                 
+                // FORMATO NUEVO PARA COMISIONES (según imagen)
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
                 
-                // Título
-                doc.setFontSize(20);
-                doc.setFont(undefined, 'bold');
-                doc.text('ControlCheck - Reporte', 105, 20, { align: 'center' });
-                
-                // Fecha del reporte
-                doc.setFontSize(10);
-                doc.setFont(undefined, 'normal');
-                doc.text(`Fecha: ${new Date().toLocaleDateString('es-MX')}`, 105, 28, { align: 'center' });
-                
-                const parts = [];
-                if (includeSalary) parts.push('Nómina');
-                if (includeCommissions) parts.push('Comisiones');
-                if (!includeExpenses) parts.push('Sin Gastos');
-                const exportType = parts.length > 0 ? parts.join(' + ') : 'Completo';
-                
-                doc.text(`Tipo: ${exportType}`, 105, 34, { align: 'center' });
-                
-                // Resumen
-                doc.setFontSize(12);
-                doc.setFont(undefined, 'bold');
-                doc.text('Resumen', 20, 45);
-                
-                doc.setFontSize(10);
-                doc.setFont(undefined, 'normal');
-                let yPos = 53;
-                
-                if (includeSalary) {
-                    doc.text(`Total Trabajado: $${totals.worked.toFixed(2)}`, 20, yPos);
-                    yPos += 6;
-                }
-                if (includeCommissions) {
-                    doc.text(`Total Comisiones: $${totals.commissions.toFixed(2)}`, 20, yPos);
-                    yPos += 6;
-                }
-                if (includeExpenses) {
-                    doc.text(`Total Gastos: $${totals.expenses.toFixed(2)}`, 20, yPos);
-                    yPos += 6;
-                }
-                
-                doc.setFont(undefined, 'bold');
-                const totalAmount = (includeSalary ? totals.worked : 0) + 
-                                   (includeCommissions ? totals.commissions : 0) - 
-                                   (includeExpenses ? totals.expenses : 0);
-                doc.text(`TOTAL: $${totalAmount.toFixed(2)}`, 20, yPos);
-                yPos += 10;
-                
-                // Tabla de registros
-                const headers = ['Fecha', 'Estado', 'Unidad'];
-                if (includeSalary) headers.push('Salario');
-                if (includeCommissions) headers.push('Comisión');
-                if (includeExpenses) headers.push('Gastos');
-                headers.push('Total');
-                
-                const tableData = records.map(record => {
-                    const row = [
-                        new Date(record.date + "T00:00:00").toLocaleDateString('es-MX'),
-                        STATUS_LABELS[record.status],
-                        record.unit || 'OFICINA'
-                    ];
-                    
-                    if (includeSalary) {
-                        row.push(`$${record.baseSalary.toFixed(2)}`);
-                    }
-                    if (includeCommissions) {
-                        row.push(`$${record.totalComm.toFixed(2)}`);
-                    }
-                    if (includeExpenses) {
-                        row.push(`$${record.totalExp.toFixed(2)}`);
-                    }
-                    
-                    const total = (includeSalary ? record.baseSalary : 0) + 
-                                  (includeCommissions ? record.totalComm : 0) - 
-                                  (includeExpenses ? record.totalExp : 0);
-                    
-                    row.push(`$${total.toFixed(2)}`);
-                    
-                    return row;
+                const exportDate = new Date().toLocaleDateString('es-MX', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
                 });
                 
+                // Título
+                doc.setFontSize(24);
+                doc.setFont(undefined, 'bold');
+                doc.text('ControlCheck', 105, 20, { align: 'center' });
+                
+                // Fecha de exportación
+                doc.setFontSize(10);
+                doc.setFont(undefined, 'normal');
+                doc.text(`Fecha: ${exportDate}`, 105, 28, { align: 'center' });
+                
+                // Información del empleado
+                let yPos = 40;
+                doc.setFontSize(11);
+                doc.setFont(undefined, 'bold');
+                doc.text('Nombre:', 20, yPos);
+                doc.setFont(undefined, 'normal');
+                doc.text('ALVARADO LOPEZ JOSE EDUARDO', 50, yPos);
+                
+                yPos += 7;
+                doc.setFont(undefined, 'bold');
+                doc.text('ID:', 20, yPos);
+                doc.setFont(undefined, 'normal');
+                doc.text('15724', 50, yPos);
+                
+                yPos += 7;
+                doc.setFont(undefined, 'bold');
+                doc.text('Periodo:', 20, yPos);
+                doc.setFont(undefined, 'normal');
+                doc.text(periodLabel, 50, yPos);
+                
+                // Calcular totales
+                let totalComisiones = 0;
+                let foliosCount = 0;
+                const dataRows = [];
+                
+                records.forEach(record => {
+                    if (record.commissions && record.commissions.length > 0) {
+                        record.commissions.forEach(comm => {
+                            if (comm.amount && parseFloat(comm.amount) > 0) {
+                                dataRows.push([
+                                    new Date(record.date + "T00:00:00").toLocaleDateString('es-MX'),
+                                    record.unit || 'OFICINA',
+                                    comm.folio || record.id || 'N/A',
+                                    comm.name || 'Comisión',
+                                    `$${parseFloat(comm.amount).toFixed(2)}`
+                                ]);
+                                totalComisiones += parseFloat(comm.amount);
+                                foliosCount++;
+                            }
+                        });
+                    }
+                });
+                
+                yPos += 7;
+                doc.setFont(undefined, 'bold');
+                doc.text('Folios:', 20, yPos);
+                doc.setFont(undefined, 'normal');
+                doc.text(foliosCount.toString(), 50, yPos);
+                
+                yPos += 7;
+                doc.setFont(undefined, 'bold');
+                doc.text('Total:', 20, yPos);
+                doc.setFont(undefined, 'normal');
+                doc.text(`$${totalComisiones.toFixed(2)}`, 50, yPos);
+                
+                // Tabla de comisiones
+                yPos += 10;
                 doc.autoTable({
-                    head: [headers],
-                    body: tableData,
+                    head: [['Fecha', 'Unidad', 'ID / Folio', 'Concepto', 'Comisión']],
+                    body: dataRows,
                     startY: yPos,
                     theme: 'grid',
-                    headStyles: { fillColor: [16, 185, 129] },
-                    styles: { fontSize: 8 }
+                    headStyles: { 
+                        fillColor: [16, 185, 129],
+                        fontStyle: 'bold',
+                        halign: 'center'
+                    },
+                    styles: { 
+                        fontSize: 9,
+                        cellPadding: 3
+                    },
+                    columnStyles: {
+                        0: { halign: 'center' },
+                        1: { halign: 'center' },
+                        2: { halign: 'center' },
+                        3: { halign: 'left' },
+                        4: { halign: 'right' }
+                    }
                 });
                 
-                const fileName = `ControlCheck_${exportType.replace(/ /g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
-                doc.save(fileName);
+                doc.save(`ControlCheck_Comisiones_${new Date().toISOString().split('T')[0]}.pdf`);
                 return true;
             } catch (error) {
                 console.error('Error al exportar PDF:', error);
@@ -855,6 +929,25 @@
             // Estado para configuración de tarifas
             const [showRatesConfig, setShowRatesConfig] = useState(false);
             const [customRates, setCustomRates] = useState(null);
+            
+            // Estados para modal de configuración (antes "Más")
+            const [showSettingsModal, setShowSettingsModal] = useState(false);
+            const [showBackupModal, setShowBackupModal] = useState(false);
+            
+            // Estado para selector de periodo de exportación
+            const [showExportPeriodModal, setShowExportPeriodModal] = useState(false);
+            const [exportPeriodSelection, setExportPeriodSelection] = useState('all');
+            const [pendingExportType, setPendingExportType] = useState(null); // 'pdf' o 'csv'
+            
+            // Estado para mostrar periodos anteriores
+            const [showPastPeriods, setShowPastPeriods] = useState(false);
+            
+            // Estados para filtros rápidos de historial
+            const [filterCommissionsOnly, setFilterCommissionsOnly] = useState(false);
+            const [filterExpensesOnly, setFilterExpensesOnly] = useState(false);
+            
+            // Estado para menú desplegable de ControlCheck
+            const [showMenu, setShowMenu] = useState(false);
             
             // Estado para modo de tema del sistema
             const [systemThemeMode, setSystemThemeMode] = useState('dark');
@@ -962,7 +1055,7 @@
             const addCommission = () => {
                 setFormData({
                     ...formData,
-                    commissions: [...formData.commissions, { name: '', amount: '' }]
+                    commissions: [...formData.commissions, { name: '', amount: '', folio: '' }]
                 });
             };
 
@@ -1106,7 +1199,24 @@
                         if (filterEndDate && recordDate > new Date(filterEndDate + "T00:00:00")) return false;
                     }
                     
-                    if (!filterStatuses.includes('all') && !filterStatuses.includes(r.status)) return false;
+                    // Filtro por estado (trabajado, descanso, etc.)
+                    if (!filterStatuses.includes('all')) {
+                        // Filtro especial para comisiones
+                        if (filterStatuses.includes('with_commissions')) {
+                            const hasCommissions = r.totalComm > 0;
+                            if (!hasCommissions) return false;
+                        }
+                        // Filtro especial para gastos
+                        if (filterStatuses.includes('with_expenses')) {
+                            const hasExpenses = r.totalExp > 0;
+                            if (!hasExpenses) return false;
+                        }
+                        // Filtros normales de estado (excluyendo los especiales)
+                        const normalStatuses = filterStatuses.filter(s => s !== 'with_commissions' && s !== 'with_expenses');
+                        if (normalStatuses.length > 0 && !normalStatuses.includes(r.status)) {
+                            return false;
+                        }
+                    }
                     
                     if (searchQuery) {
                         const query = searchQuery.toLowerCase();
@@ -1316,7 +1426,7 @@
                         confirmColor={modalState.confirmColor}
                     />
 
-                    {/* Header con título */}
+                    {/* Header con título y menú desplegable */}
                     <div className="glass-effect sticky top-0 z-40 px-6 py-4 mb-1">
                         <div className="max-w-md mx-auto">
                             <div className="flex items-center gap-3 mb-2">
@@ -1324,7 +1434,13 @@
                                     <Briefcase size={20} className="text-white" />
                                 </div>
                                 <div className="flex-1">
-                                    <h1 className="text-lg font-black text-white tracking-tight">ControlCheck</h1>
+                                    <button 
+                                        onClick={() => setShowMenu(!showMenu)}
+                                        className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                                    >
+                                        <h1 className="text-lg font-black text-white tracking-tight">ControlCheck</h1>
+                                        <ChevronDown size={16} className={`text-emerald-400 transition-transform ${showMenu ? 'rotate-180' : ''}`} />
+                                    </button>
                                     <p className="text-[10px] font-semibold text-emerald-400">{getGreeting()}</p>
                                 </div>
                                 <div className="text-right">
@@ -1334,6 +1450,83 @@
                                     </p>
                                 </div>
                             </div>
+                            
+                            {/* Menú desplegable de ControlCheck */}
+                            {showMenu && (
+                                <div className="mt-4 bg-dark-card rounded-2xl p-4 shadow-2xl border border-dark-border animate-slide-down space-y-3">
+                                    <button
+                                        onClick={() => {
+                                            setShowMenu(false);
+                                            setShowSettingsModal(true);
+                                        }}
+                                        className="w-full flex items-center gap-3 p-3 rounded-xl bg-dark-hover hover:bg-dark-card transition-all text-left"
+                                    >
+                                        <Palette size={18} className="text-purple-400" />
+                                        <span className="text-sm font-bold text-white">Tema de Color</span>
+                                    </button>
+                                    
+                                    <button
+                                        onClick={() => {
+                                            setShowMenu(false);
+                                            setShowRatesConfig(true);
+                                        }}
+                                        className="w-full flex items-center gap-3 p-3 rounded-xl bg-dark-hover hover:bg-dark-card transition-all text-left"
+                                    >
+                                        <Settings size={18} className="text-blue-400" />
+                                        <span className="text-sm font-bold text-white">Configuración de Tarifas</span>
+                                    </button>
+                                    
+                                    <button
+                                        onClick={() => {
+                                            setShowMenu(false);
+                                            setShowExportPeriodModal(true);
+                                        }}
+                                        className="w-full flex items-center gap-3 p-3 rounded-xl bg-dark-hover hover:bg-dark-card transition-all text-left"
+                                    >
+                                        <Download size={18} className="text-emerald-400" />
+                                        <span className="text-sm font-bold text-white">Exportar Datos</span>
+                                    </button>
+                                    
+                                    <button
+                                        onClick={() => {
+                                            setShowMenu(false);
+                                            setShowBackupModal(true);
+                                        }}
+                                        className="w-full flex items-center gap-3 p-3 rounded-xl bg-dark-hover hover:bg-dark-card transition-all text-left"
+                                    >
+                                        <Shield size={18} className="text-amber-400" />
+                                        <span className="text-sm font-bold text-white">Respaldo y Restauración</span>
+                                    </button>
+                                    
+                                    <div className="border-t border-dark-border pt-3 mt-3">
+                                        <button
+                                            onClick={() => {
+                                                setModalState({
+                                                    isOpen: true,
+                                                    type: 'reset',
+                                                    title: '⚠️ Restablecer Datos',
+                                                    message: 'Esto eliminará TODOS tus registros y configuración. Esta acción NO se puede deshacer.',
+                                                    confirmText: 'Eliminar Todo',
+                                                    confirmColor: 'rose',
+                                                    onConfirm: () => {
+                                                        setRecords([]);
+                                                        safeLocalStorage.removeItem('worktracker_records');
+                                                        setSelectedRecords([]);
+                                                        setIsMultiSelectMode(false);
+                                                        showToast('Todos los datos han sido eliminados', 'info');
+                                                    }
+                                                });
+                                                setShowMenu(false);
+                                            }}
+                                            disabled={records.length === 0}
+                                            className="w-full flex items-center gap-3 p-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            <Trash2 size={18} className="text-rose-400" />
+                                            <span className="text-sm font-bold text-rose-400">Restablecer Datos</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -1342,64 +1535,6 @@
                         {activeTab === 'dashboard' && (
                             <div className="space-y-4 animate-fade-in">
                                 
-                                {/* Selector de Periodo */}
-                                <div className="glass-effect rounded-2xl p-4 shadow-xl">
-                                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3 block flex items-center gap-2">
-                                        <Calendar size={12} />
-                                        Periodo de Análisis
-                                    </label>
-                                    <select 
-                                        value={selectedPeriod} 
-                                        onChange={e => {
-                                            setSelectedPeriod(e.target.value);
-                                            if (e.target.value !== 'custom') {
-                                                setFilterStartDate('');
-                                                setFilterEndDate('');
-                                            }
-                                        }}
-                                        className="w-full bg-dark-hover border border-dark-border p-3 rounded-xl text-sm font-semibold outline-none text-white hover:border-emerald-500/50 transition-all"
-                                    >
-                                        <option value="custom">📅 Personalizado</option>
-                                        <optgroup label="💰 Nómina">
-                                            {payrollPeriods.map((period, idx) => (
-                                                <option key={`payroll-${idx}`} value={period.label}>
-                                                    {period.label} • Pago: ${period.payDay}
-                                                </option>
-                                            ))}
-                                        </optgroup>
-                                        <optgroup label="⭐ Comisiones">
-                                            {commissionPeriods.map((period, idx) => (
-                                                <option key={`commission-${idx}`} value={period.label}>
-                                                    {period.label}
-                                                </option>
-                                            ))}
-                                        </optgroup>
-                                    </select>
-                                    
-                                    {selectedPeriod === 'custom' && (
-                                        <div className="flex gap-3 mt-3 animate-slide-up">
-                                            <div className="flex-1">
-                                                <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Inicio</label>
-                                                <input 
-                                                    type="date" 
-                                                    value={filterStartDate} 
-                                                    onChange={e => setFilterStartDate(e.target.value)} 
-                                                    className="w-full bg-dark-hover border border-dark-border p-2.5 rounded-lg text-xs font-semibold outline-none text-white hover:border-emerald-500/50"
-                                                />
-                                            </div>
-                                            <div className="flex-1">
-                                                <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Fin</label>
-                                                <input 
-                                                    type="date" 
-                                                    value={filterEndDate} 
-                                                    onChange={e => setFilterEndDate(e.target.value)} 
-                                                    className="w-full bg-dark-hover border border-dark-border p-2.5 rounded-lg text-xs font-semibold outline-none text-white hover:border-emerald-500/50"
-                                                />
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-
                                 {/* Card Principal de Totales */}
                                 <div className="relative overflow-hidden rounded-3xl shadow-2xl">
                                     <div className={`absolute inset-0 bg-gradient-to-br ${THEMES[theme].gradient}`}></div>
@@ -1636,7 +1771,6 @@
                                                     type="date" 
                                                     value={formData.date} 
                                                     onChange={e => setFormData({...formData, date: e.target.value})} 
-                                                    max={new Date().toISOString().split('T')[0]}
                                                     className="w-full bg-dark-hover border border-dark-border p-3 rounded-xl text-sm font-semibold outline-none text-white hover:border-emerald-500/50"
                                                     required
                                                 />
@@ -1665,7 +1799,18 @@
                                                     <input 
                                                         type="time" 
                                                         value={formData.startTime} 
-                                                        onChange={e => setFormData({...formData, startTime: e.target.value})} 
+                                                        onChange={e => {
+                                                            const newStartTime = e.target.value;
+                                                            // Calcular hora final automáticamente (8 horas después)
+                                                            let newEndTime = '';
+                                                            if (newStartTime) {
+                                                                const [hours, minutes] = newStartTime.split(':').map(Number);
+                                                                const startDate = new Date(2000, 0, 1, hours, minutes);
+                                                                const endDate = new Date(startDate.getTime() + 8 * 60 * 60 * 1000); // +8 horas
+                                                                newEndTime = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`;
+                                                            }
+                                                            setFormData({...formData, startTime: newStartTime, endTime: newEndTime});
+                                                        }} 
                                                         className="w-full bg-dark-hover border border-dark-border p-3 rounded-xl text-sm font-semibold outline-none text-white hover:border-emerald-500/50"
                                                     />
                                                 </div>
@@ -1724,42 +1869,56 @@
                                                 </div>
                                                 <div className="space-y-2">
                                                     {formData.commissions.map((comm, i) => (
-                                                        <div key={i} className="flex gap-2 items-center">
+                                                        <div key={i} className="space-y-2">
+                                                            <div className="flex gap-2 items-center">
+                                                                <input 
+                                                                    placeholder="Nombre de comisión" 
+                                                                    type="text" 
+                                                                    maxLength={50}
+                                                                    className="flex-1 bg-dark-hover border border-dark-border p-2.5 rounded-lg text-xs font-semibold outline-none text-white placeholder-gray-600 hover:border-emerald-500/50" 
+                                                                    value={comm.name} 
+                                                                    onChange={e => { 
+                                                                        const newC = [...formData.commissions]; 
+                                                                        newC[i].name = e.target.value; 
+                                                                        setFormData({...formData, commissions: newC}); 
+                                                                    }} 
+                                                                />
+                                                                <input 
+                                                                    placeholder="$" 
+                                                                    type="number" 
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    className="w-28 bg-dark-hover border border-dark-border p-2.5 rounded-lg text-xs font-bold text-emerald-400 outline-none hover:border-emerald-500/50" 
+                                                                    value={comm.amount} 
+                                                                    onChange={e => { 
+                                                                        const newC = [...formData.commissions]; 
+                                                                        newC[i].amount = e.target.value; 
+                                                                        setFormData({...formData, commissions: newC}); 
+                                                                    }} 
+                                                                />
+                                                                <button 
+                                                                    type="button" 
+                                                                    onClick={() => { 
+                                                                        const newC = formData.commissions.filter((_, idx) => idx !== i); 
+                                                                        setFormData({...formData, commissions: newC}); 
+                                                                    }}
+                                                                    className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-rose-500/20 transition-colors group"
+                                                                >
+                                                                    <X size={16} className="text-gray-500 group-hover:text-rose-400" />
+                                                                </button>
+                                                            </div>
                                                             <input 
-                                                                placeholder="Nombre de comisión" 
+                                                                placeholder="ID / Folio (opcional)" 
                                                                 type="text" 
-                                                                maxLength={50}
-                                                                className="flex-1 bg-dark-hover border border-dark-border p-2.5 rounded-lg text-xs font-semibold outline-none text-white placeholder-gray-600 hover:border-emerald-500/50" 
-                                                                value={comm.name} 
+                                                                maxLength={20}
+                                                                className="w-full bg-dark-hover border border-dark-border p-2.5 rounded-lg text-xs font-semibold outline-none text-white placeholder-gray-600 hover:border-emerald-500/50" 
+                                                                value={comm.folio || ''} 
                                                                 onChange={e => { 
                                                                     const newC = [...formData.commissions]; 
-                                                                    newC[i].name = e.target.value; 
+                                                                    newC[i].folio = e.target.value; 
                                                                     setFormData({...formData, commissions: newC}); 
                                                                 }} 
                                                             />
-                                                            <input 
-                                                                placeholder="$" 
-                                                                type="number" 
-                                                                step="0.01"
-                                                                min="0"
-                                                                className="w-28 bg-dark-hover border border-dark-border p-2.5 rounded-lg text-xs font-bold text-emerald-400 outline-none hover:border-emerald-500/50" 
-                                                                value={comm.amount} 
-                                                                onChange={e => { 
-                                                                    const newC = [...formData.commissions]; 
-                                                                    newC[i].amount = e.target.value; 
-                                                                    setFormData({...formData, commissions: newC}); 
-                                                                }} 
-                                                            />
-                                                            <button 
-                                                                type="button" 
-                                                                onClick={() => { 
-                                                                    const newC = formData.commissions.filter((_, idx) => idx !== i); 
-                                                                    setFormData({...formData, commissions: newC}); 
-                                                                }}
-                                                                className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-rose-500/20 transition-colors group"
-                                                            >
-                                                                <X size={16} className="text-gray-500 group-hover:text-rose-400" />
-                                                            </button>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -1976,6 +2135,28 @@
                                                     {v}
                                                 </button>
                                             ))}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleStatusToggle('with_commissions')}
+                                                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                                                    filterStatuses.includes('with_commissions')
+                                                        ? 'bg-yellow-500 text-white shadow-lg'
+                                                        : 'bg-dark-hover border border-dark-border text-gray-400 hover:bg-dark-card'
+                                                }`}
+                                            >
+                                                💰 Comisiones
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleStatusToggle('with_expenses')}
+                                                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                                                    filterStatuses.includes('with_expenses')
+                                                        ? 'bg-red-500 text-white shadow-lg'
+                                                        : 'bg-dark-hover border border-dark-border text-gray-400 hover:bg-dark-card'
+                                                }`}
+                                            >
+                                                📤 Gastos
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -2050,383 +2231,361 @@
                             </div>
                         )}
 
-                        {activeTab === 'more' && (
-                            <div className="space-y-4 animate-fade-in">
-                                <h2 className="text-xl font-black text-white px-1">Más Opciones</h2>
-                                
-                                {/* Exportar Datos */}
-                                <div className="glass-effect p-5 rounded-2xl shadow-xl">
-                                    <h4 className="text-sm font-bold mb-4 flex items-center gap-2">
-                                        <Download size={16} className="text-emerald-400" />
-                                        Exportar Datos
-                                    </h4>
-                                    
-                                    {/* Checkboxes de selección */}
-                                    <div className="mb-4 space-y-2">
-                                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">¿Qué datos incluir?</p>
-                                        <label className="flex items-center gap-3 p-3 rounded-lg bg-dark-hover hover:bg-dark-card transition-all cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={exportSalary}
-                                                onChange={(e) => setExportSalary(e.target.checked)}
-                                                className="w-5 h-5 rounded border-2 border-dark-border text-emerald-500 focus:ring-emerald-500"
-                                            />
-                                            <div className="flex-1">
-                                                <span className="text-sm font-bold text-white block">Nómina (Salario Base)</span>
-                                                <span className="text-xs text-gray-500">Días trabajados, descansos, festivos, faltas</span>
-                                            </div>
-                                        </label>
-                                        <label className="flex items-center gap-3 p-3 rounded-lg bg-dark-hover hover:bg-dark-card transition-all cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={exportCommissions}
-                                                onChange={(e) => setExportCommissions(e.target.checked)}
-                                                className="w-5 h-5 rounded border-2 border-dark-border text-emerald-500 focus:ring-emerald-500"
-                                            />
-                                            <div className="flex-1">
-                                                <span className="text-sm font-bold text-white block">Comisiones</span>
-                                                <span className="text-xs text-gray-500">Comisiones y bonos adicionales</span>
-                                            </div>
-                                        </label>
-                                        <label className="flex items-center gap-3 p-3 rounded-lg bg-dark-hover hover:bg-dark-card transition-all cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={exportExpenses}
-                                                onChange={(e) => setExportExpenses(e.target.checked)}
-                                                className="w-5 h-5 rounded border-2 border-dark-border text-emerald-500 focus:ring-emerald-500"
-                                            />
-                                            <div className="flex-1">
-                                                <span className="text-sm font-bold text-white block">Gastos</span>
-                                                <span className="text-xs text-gray-500">Incluir columna de gastos en el reporte</span>
-                                            </div>
-                                        </label>
-                                    </div>
-                                    
-                                    {(!exportSalary && !exportCommissions) && (
-                                        <div className="mb-4 p-3 bg-amber-500/20 border border-amber-500/30 rounded-xl">
-                                            <p className="text-xs text-amber-400 font-semibold flex items-center gap-2">
-                                                <AlertCircle size={14} />
-                                                Selecciona al menos una opción para exportar
-                                            </p>
-                                        </div>
-                                    )}
-                                    
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <button
-                                            onClick={() => {
-                                                if (records.length === 0) {
-                                                    showToast('No hay datos para exportar', 'warning');
-                                                    return;
-                                                }
-                                                if (!exportSalary && !exportCommissions) {
-                                                    showToast('Selecciona al menos Nómina o Comisiones', 'warning');
-                                                    return;
-                                                }
-                                                if (exportToPDF(filteredRecords, totals, exportSalary, exportCommissions, exportExpenses)) {
-                                                    const parts = [];
-                                                    if (exportSalary) parts.push('nómina');
-                                                    if (exportCommissions) parts.push('comisiones');
-                                                    if (!exportExpenses) parts.push('sin gastos');
-                                                    const type = parts.join(', ');
-                                                    showToast(`✓ PDF con ${type} generado`, 'success');
-                                                } else {
-                                                    showToast('Error al generar el PDF', 'error');
-                                                }
-                                            }}
-                                            disabled={!exportSalary && !exportCommissions}
-                                            className={`flex flex-col items-center justify-center gap-2 px-4 py-5 rounded-xl text-sm font-bold border transition-all ${
-                                                !exportSalary && !exportCommissions
-                                                    ? 'bg-dark-card text-gray-600 border-dark-border cursor-not-allowed'
-                                                    : 'bg-dark-hover text-gray-300 border-dark-border hover:bg-dark-card hover:border-emerald-500/30'
-                                            }`}
-                                        >
-                                            <FileText size={24} className="text-emerald-400" />
-                                            <span>PDF</span>
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                if (records.length === 0) {
-                                                    showToast('No hay datos para exportar', 'warning');
-                                                    return;
-                                                }
-                                                if (!exportSalary && !exportCommissions) {
-                                                    showToast('Selecciona al menos Nómina o Comisiones', 'warning');
-                                                    return;
-                                                }
-                                                if (exportToCSV(filteredRecords, exportSalary, exportCommissions, exportExpenses)) {
-                                                    const parts = [];
-                                                    if (exportSalary) parts.push('nómina');
-                                                    if (exportCommissions) parts.push('comisiones');
-                                                    if (!exportExpenses) parts.push('sin gastos');
-                                                    const type = parts.join(', ');
-                                                    showToast(`✓ CSV con ${type} exportado`, 'success');
-                                                } else {
-                                                    showToast('Error al exportar CSV', 'error');
-                                                }
-                                            }}
-                                            disabled={!exportSalary && !exportCommissions}
-                                            className={`flex flex-col items-center justify-center gap-2 px-4 py-5 rounded-xl text-sm font-bold border transition-all ${
-                                                !exportSalary && !exportCommissions
-                                                    ? 'bg-dark-card text-gray-600 border-dark-border cursor-not-allowed'
-                                                    : 'bg-dark-hover text-gray-300 border-dark-border hover:bg-dark-card hover:border-emerald-500/30'
-                                            }`}
-                                        >
-                                            <Download size={24} className="text-emerald-400" />
-                                            <span>CSV</span>
-                                        </button>
-                                    </div>
-                                </div>
+                    </main>
 
-                                {/* Respaldo y Restauración */}
-                                <div className="glass-effect p-5 rounded-2xl shadow-xl">
-                                    <h4 className="text-sm font-bold mb-4 flex items-center gap-2">
-                                        <RefreshCw size={16} className="text-blue-400" />
-                                        Respaldo y Restauración
-                                    </h4>
-                                    <div className="space-y-3">
-                                        <button
-                                            onClick={() => {
-                                                if (records.length === 0) {
-                                                    showToast('No hay datos para respaldar', 'warning');
-                                                    return;
-                                                }
-                                                if (exportBackup(records)) {
-                                                    showToast('✓ Respaldo creado exitosamente', 'success');
-                                                } else {
-                                                    showToast('Error al crear el respaldo', 'error');
-                                                }
-                                            }}
-                                            className="w-full flex items-center justify-center gap-2 px-4 py-4 bg-blue-500/20 rounded-xl text-sm font-bold text-blue-400 border border-blue-500/30 hover:bg-blue-500/30 transition-all"
-                                        >
-                                            <Download size={20} /> Exportar Respaldo (JSON)
-                                        </button>
-                                        <button
-                                            onClick={() => fileInputRef.current?.click()}
-                                            className="w-full flex items-center justify-center gap-2 px-4 py-4 bg-amber-500/20 rounded-xl text-sm font-bold text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 transition-all"
-                                        >
-                                            <Upload size={20} /> Importar Respaldo
-                                        </button>
-                                        <input
-                                            ref={fileInputRef}
-                                            type="file"
-                                            accept=".json"
-                                            onChange={(e) => {
-                                                const file = e.target.files?.[0];
-                                                if (file) {
-                                                    importBackup(file, setRecords, showToast);
-                                                }
-                                                e.target.value = '';
-                                            }}
-                                            className="hidden"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Temas */}
-                                <div className="glass-effect p-5 rounded-2xl shadow-xl">
-                                    <h4 className="text-sm font-bold mb-2 flex items-center gap-2">
-                                        <Palette size={16} className="text-purple-400" />
+                    {/* Modales de Configuración */}
+                    
+                    {/* Modal de Tema de Color */}
+                    {showSettingsModal && (
+                        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
+                             onClick={() => setShowSettingsModal(false)}>
+                            <div className="glass-effect rounded-3xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto animate-scale-in"
+                                 onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-between mb-6">
+                                    <h3 className="text-lg font-black text-white flex items-center gap-2">
+                                        <Palette size={20} className="text-purple-400" />
                                         Tema de Color
-                                    </h4>
-                                    <p className="text-xs text-gray-500 mb-4 flex items-center gap-2">
-                                        <span>Modo del sistema:</span>
-                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                            systemThemeMode === 'light' 
-                                                ? 'bg-amber-500/20 text-amber-400' 
-                                                : 'bg-blue-500/20 text-blue-400'
-                                        }`}>
-                                            {systemThemeMode === 'light' ? '☀️ Claro' : '🌙 Oscuro'}
-                                        </span>
-                                    </p>
-                                    <div className="grid grid-cols-5 gap-2">
-                                        {Object.entries(THEMES).map(([key, themeData]) => (
-                                            <button
-                                                key={key}
-                                                onClick={() => setTheme(key)}
-                                                className={`aspect-square rounded-xl flex flex-col items-center justify-center gap-1 transition-all ${
-                                                    theme === key
-                                                        ? 'ring-2 ring-offset-2 ring-offset-dark-bg scale-105'
-                                                        : 'hover:scale-105'
-                                                }`}
-                                                style={{ 
-                                                    backgroundColor: themeData.color + '20',
-                                                    borderColor: themeData.color + '50',
-                                                    borderWidth: '2px',
-                                                    color: themeData.color
-                                                }}
-                                            >
-                                                <div 
-                                                    className="w-6 h-6 rounded-full"
-                                                    style={{ backgroundColor: themeData.color }}
-                                                />
-                                                {theme === key && <Check size={12} />}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <p className="text-xs text-gray-500 mt-3 text-center font-semibold">{THEMES[theme].name}</p>
-                                </div>
-
-                                {/* Configuración de Tarifas */}
-                                <div className="glass-effect p-5 rounded-2xl shadow-xl">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <h4 className="text-sm font-bold flex items-center gap-2">
-                                            <Settings size={16} className="text-blue-400" />
-                                            Configuración de Tarifas
-                                        </h4>
-                                        <button
-                                            onClick={() => setShowRatesConfig(!showRatesConfig)}
-                                            className="text-xs font-bold text-emerald-400 hover:text-emerald-300"
-                                        >
-                                            {showRatesConfig ? 'Ocultar' : 'Editar'}
-                                        </button>
-                                    </div>
-                                    
-                                    {showRatesConfig && (
-                                        <div className="space-y-3 animate-slide-up">
-                                            {Object.entries(STATUS_LABELS).map(([key, label]) => {
-                                                const currentRates = getCurrentRates();
-                                                return (
-                                                    <div key={key}>
-                                                        <label className="text-xs font-semibold text-gray-400 mb-1.5 block">
-                                                            {label}
-                                                        </label>
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            value={customRates ? customRates[key] : RATES[key]}
-                                                            onChange={(e) => {
-                                                                const newRates = customRates ? {...customRates} : {...RATES};
-                                                                newRates[key] = parseFloat(e.target.value) || 0;
-                                                                setCustomRates(newRates);
-                                                            }}
-                                                            className="w-full bg-dark-hover border border-dark-border p-3 rounded-xl text-sm font-bold text-emerald-400 outline-none hover:border-emerald-500/50"
-                                                        />
-                                                    </div>
-                                                );
-                                            })}
-                                            <div className="flex gap-3 pt-2">
-                                                <button
-                                                    onClick={() => {
-                                                        setCustomRates(null);
-                                                        safeLocalStorage.removeItem('worktracker_rates');
-                                                        showToast('✓ Tarifas restauradas a valores por defecto', 'success');
-                                                    }}
-                                                    className="flex-1 px-4 py-3 bg-dark-hover rounded-xl text-xs font-bold text-gray-400 hover:bg-dark-card transition-all"
-                                                >
-                                                    Restaurar
-                                                </button>
-                                                <button
-                                                    onClick={() => {
-                                                        if (customRates) {
-                                                            saveCustomRates(customRates);
-                                                            setShowRatesConfig(false);
-                                                        }
-                                                    }}
-                                                    className="flex-1 px-4 py-3 bg-emerald-500 rounded-xl text-xs font-bold text-white hover:bg-emerald-600 transition-all"
-                                                >
-                                                    Guardar
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-                                    
-                                    {!showRatesConfig && (
-                                        <div className="text-xs text-gray-500">
-                                            {customRates ? (
-                                                <p className="flex items-center gap-2">
-                                                    <Check size={14} className="text-emerald-400" />
-                                                    Usando tarifas personalizadas
-                                                </p>
-                                            ) : (
-                                                <p>Usando tarifas por defecto</p>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Reset de Datos */}
-                                <div className="glass-effect p-5 rounded-2xl shadow-xl">
-                                    <h4 className="text-sm font-bold mb-4 flex items-center gap-2">
-                                        <AlertCircle size={16} className="text-rose-400" />
-                                        Zona de Peligro
-                                    </h4>
-                                    <button
-                                        onClick={handleResetData}
-                                        disabled={records.length === 0}
-                                        className={`w-full flex items-center justify-center gap-2 px-4 py-4 rounded-xl text-sm font-bold transition-all ${
-                                            records.length === 0
-                                                ? 'bg-dark-hover text-gray-600 border border-dark-border cursor-not-allowed'
-                                                : 'bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-rose-500/30'
-                                        }`}
-                                    >
-                                        <Trash2 size={20} /> Eliminar Todos los Datos
+                                    </h3>
+                                    <button onClick={() => setShowSettingsModal(false)} className="text-gray-500 hover:text-white">
+                                        <X size={24} />
                                     </button>
-                                    <p className="text-[10px] text-gray-600 mt-2 text-center">
-                                        Esta acción es permanente y no se puede deshacer
-                                    </p>
                                 </div>
-
-                                {/* Información */}
-                                <div className="glass-effect p-5 rounded-2xl shadow-xl">
-                                    <h4 className="text-sm font-bold mb-3 flex items-center gap-2">
-                                        <AlertCircle size={16} className="text-gray-400" />
-                                        Información
-                                    </h4>
-                                    <div className="space-y-2 text-xs text-gray-500">
-                                        <p><span className="font-bold text-gray-400">Versión:</span> 2.0</p>
-                                        <p><span className="font-bold text-gray-400">Registros:</span> {records.length}</p>
-                                        <p><span className="font-bold text-gray-400">PWA:</span> Instalable ✓</p>
+                                
+                                <p className="text-xs text-gray-500 mb-4 flex items-center gap-2">
+                                    <span>Modo del sistema:</span>
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                        systemThemeMode === 'light' 
+                                            ? 'bg-amber-500/20 text-amber-400' 
+                                            : 'bg-blue-500/20 text-blue-400'
+                                    }`}>
+                                        {systemThemeMode === 'light' ? '☀️ Claro' : '🌙 Oscuro'}
+                                    </span>
+                                </p>
+                                
+                                <div className="grid grid-cols-5 gap-3">
+                                    {Object.entries(THEMES).map(([key, themeData]) => (
+                                        <button
+                                            key={key}
+                                            onClick={() => setTheme(key)}
+                                            className={`aspect-square rounded-xl flex flex-col items-center justify-center gap-1 transition-all ${
+                                                theme === key
+                                                    ? 'ring-2 ring-offset-2 ring-offset-dark-bg scale-105'
+                                                    : 'hover:scale-105'
+                                            }`}
+                                            style={{ 
+                                                backgroundColor: themeData.color + '20',
+                                                borderColor: themeData.color + '50',
+                                                borderWidth: '2px',
+                                                color: themeData.color
+                                            }}
+                                        >
+                                            <div 
+                                                className="w-8 h-8 rounded-full"
+                                                style={{ backgroundColor: themeData.color }}
+                                            />
+                                            {theme === key && <Check size={14} />}
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className="text-xs text-gray-500 mt-4 text-center font-semibold">{THEMES[theme].name}</p>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {/* Modal de Configuración de Tarifas */}
+                    {showRatesConfig && (
+                        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
+                             onClick={() => setShowRatesConfig(false)}>
+                            <div className="glass-effect rounded-3xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto animate-scale-in"
+                                 onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-between mb-6">
+                                    <h3 className="text-lg font-black text-white flex items-center gap-2">
+                                        <Settings size={20} className="text-blue-400" />
+                                        Configuración de Tarifas
+                                    </h3>
+                                    <button onClick={() => setShowRatesConfig(false)} className="text-gray-500 hover:text-white">
+                                        <X size={24} />
+                                    </button>
+                                </div>
+                                
+                                <div className="space-y-3">
+                                    {Object.entries(STATUS_LABELS).map(([key, label]) => {
+                                        const currentRates = getCurrentRates();
+                                        return (
+                                            <div key={key}>
+                                                <label className="text-xs font-semibold text-gray-400 mb-1.5 block">
+                                                    {label}
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={customRates ? customRates[key] : RATES[key]}
+                                                    onChange={(e) => {
+                                                        const newRates = customRates ? {...customRates} : {...RATES};
+                                                        newRates[key] = parseFloat(e.target.value) || 0;
+                                                        setCustomRates(newRates);
+                                                    }}
+                                                    className="w-full bg-dark-hover border border-dark-border p-3 rounded-xl text-sm font-bold text-emerald-400 outline-none hover:border-emerald-500/50"
+                                                />
+                                            </div>
+                                        );
+                                    })}
+                                    <div className="flex gap-3 pt-4">
+                                        <button
+                                            onClick={() => {
+                                                setCustomRates(null);
+                                                safeLocalStorage.removeItem('worktracker_rates');
+                                                showToast('✓ Tarifas restauradas a valores por defecto', 'success');
+                                            }}
+                                            className="flex-1 px-4 py-3 bg-dark-hover rounded-xl text-xs font-bold text-gray-400 hover:bg-dark-card transition-all"
+                                        >
+                                            Restaurar
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                if (customRates) {
+                                                    saveCustomRates(customRates);
+                                                    setShowRatesConfig(false);
+                                                }
+                                            }}
+                                            className="flex-1 px-4 py-3 bg-emerald-500 rounded-xl text-xs font-bold text-white hover:bg-emerald-600 transition-all"
+                                        >
+                                            Guardar
+                                        </button>
                                     </div>
                                 </div>
                             </div>
-                        )}
+                        </div>
+                    )}
+                    
+                    {/* Modal de Exportar Datos */}
+                    {showExportPeriodModal && (() => {
+                        const exportRecords = exportPeriodSelection === 'all'
+                            ? records
+                            : records.filter(r => {
+                                const period = [...payrollPeriods, ...commissionPeriods].find(p => p.label === exportPeriodSelection);
+                                if (!period) return true;
+                                const d = new Date(r.date + "T00:00:00");
+                                return d >= period.startDate && d <= period.endDate;
+                            });
+                        const exportPeriodLabel = exportPeriodSelection === 'all' ? 'Todos los registros' : exportPeriodSelection;
+                        const exportTotals = {
+                            total: exportRecords.reduce((s, r) => s + r.baseSalary + r.totalComm - r.totalExp, 0),
+                            commissions: exportRecords.reduce((s, r) => s + r.totalComm, 0),
+                            expenses: exportRecords.reduce((s, r) => s + r.totalExp, 0)
+                        };
 
-                    </main>
+                        return (
+                            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
+                                 onClick={() => setShowExportPeriodModal(false)}>
+                                <div className="glass-effect rounded-3xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto animate-scale-in"
+                                     onClick={(e) => e.stopPropagation()}>
 
-                    {/* Navegación Inferior */}
-                    <nav className="fixed bottom-0 left-0 right-0 glass-effect h-20 flex justify-around items-center px-2 z-50 border-t border-dark-border">
+                                    {/* Encabezado */}
+                                    <div className="flex items-center justify-between mb-5">
+                                        <h3 className="text-lg font-black text-white flex items-center gap-2">
+                                            <Download size={20} className="text-emerald-400" />
+                                            Exportar Datos
+                                        </h3>
+                                        <button onClick={() => setShowExportPeriodModal(false)} className="text-gray-500 hover:text-white">
+                                            <X size={24} />
+                                        </button>
+                                    </div>
+
+                                    {/* Selector de periodo */}
+                                    <div className="mb-5">
+                                        <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">
+                                            Periodo a exportar
+                                        </label>
+                                        <select
+                                            value={exportPeriodSelection}
+                                            onChange={(e) => setExportPeriodSelection(e.target.value)}
+                                            className="w-full bg-dark-hover border border-dark-border text-white text-sm font-semibold p-3 rounded-xl outline-none hover:border-emerald-500/50 focus:border-emerald-500"
+                                        >
+                                            <option value="all">Todos los registros</option>
+                                            <optgroup label="── Periodos de Nómina ──">
+                                                {payrollPeriods.map((p, i) => (
+                                                    <option key={`pay-${i}`} value={p.label}>{p.label}</option>
+                                                ))}
+                                            </optgroup>
+                                            <optgroup label="── Periodos de Comisiones ──">
+                                                {commissionPeriods.map((p, i) => (
+                                                    <option key={`com-${i}`} value={p.label}>{p.label}</option>
+                                                ))}
+                                            </optgroup>
+                                        </select>
+
+                                        {/* Resumen del periodo */}
+                                        <div className="mt-3 flex items-center justify-between bg-dark-hover rounded-xl px-4 py-2.5">
+                                            <span className="text-xs text-gray-500 font-semibold">Registros encontrados</span>
+                                            <span className={`text-sm font-black ${exportRecords.length > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                                {exportRecords.length} días
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Botones de exportación */}
+                                    <div className="space-y-2">
+                                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Formato CSV</p>
+
+                                        <button
+                                            onClick={() => {
+                                                if (exportRecords.length === 0) { showToast('No hay registros en el periodo seleccionado', 'warning'); return; }
+                                                if (exportToCSV(exportRecords, true, false, true, exportPeriodLabel)) {
+                                                    showToast('✓ Nómina exportada como CSV', 'success');
+                                                    setShowExportPeriodModal(false);
+                                                } else { showToast('Error al exportar CSV', 'error'); }
+                                            }}
+                                            className="w-full flex items-center gap-3 px-4 py-3 bg-emerald-500/10 rounded-xl text-sm font-bold text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all text-left"
+                                        >
+                                            <FileText size={18} /> Nómina (CSV)
+                                        </button>
+
+                                        <button
+                                            onClick={() => {
+                                                if (exportRecords.length === 0) { showToast('No hay registros en el periodo seleccionado', 'warning'); return; }
+                                                if (exportToCSV(exportRecords, true, true, true, exportPeriodLabel)) {
+                                                    showToast('✓ Comisiones exportadas como CSV', 'success');
+                                                    setShowExportPeriodModal(false);
+                                                } else { showToast('Error al exportar CSV', 'error'); }
+                                            }}
+                                            className="w-full flex items-center gap-3 px-4 py-3 bg-blue-500/10 rounded-xl text-sm font-bold text-blue-400 border border-blue-500/30 hover:bg-blue-500/20 transition-all text-left"
+                                        >
+                                            <FileText size={18} /> Comisiones (CSV)
+                                        </button>
+
+                                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider pt-3 pb-1 border-t border-dark-border mt-3">Formato PDF</p>
+
+                                        <button
+                                            onClick={() => {
+                                                if (exportRecords.length === 0) { showToast('No hay registros en el periodo seleccionado', 'warning'); return; }
+                                                if (exportToPDF(exportRecords, exportTotals, true, false, true, exportPeriodLabel)) {
+                                                    showToast('✓ Nómina exportada como PDF', 'success');
+                                                    setShowExportPeriodModal(false);
+                                                } else { showToast('Error al exportar PDF', 'error'); }
+                                            }}
+                                            className="w-full flex items-center gap-3 px-4 py-3 bg-rose-500/10 rounded-xl text-sm font-bold text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 transition-all text-left"
+                                        >
+                                            <Download size={18} /> Nómina (PDF)
+                                        </button>
+
+                                        <button
+                                            onClick={() => {
+                                                if (exportRecords.length === 0) { showToast('No hay registros en el periodo seleccionado', 'warning'); return; }
+                                                if (exportToPDF(exportRecords, exportTotals, true, true, true, exportPeriodLabel)) {
+                                                    showToast('✓ Comisiones exportadas como PDF', 'success');
+                                                    setShowExportPeriodModal(false);
+                                                } else { showToast('Error al exportar PDF', 'error'); }
+                                            }}
+                                            className="w-full flex items-center gap-3 px-4 py-3 bg-purple-500/10 rounded-xl text-sm font-bold text-purple-400 border border-purple-500/30 hover:bg-purple-500/20 transition-all text-left"
+                                        >
+                                            <Download size={18} /> Comisiones (PDF)
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* Modal de Respaldo y Restauración */}
+                    {showBackupModal && (
+                        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
+                             onClick={() => setShowBackupModal(false)}>
+                            <div className="glass-effect rounded-3xl p-6 max-w-md w-full animate-scale-in"
+                                 onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-between mb-6">
+                                    <h3 className="text-lg font-black text-white flex items-center gap-2">
+                                        <Shield size={20} className="text-amber-400" />
+                                        Respaldo y Restauración
+                                    </h3>
+                                    <button onClick={() => setShowBackupModal(false)} className="text-gray-500 hover:text-white">
+                                        <X size={24} />
+                                    </button>
+                                </div>
+                                
+                                <div className="space-y-3">
+                                    <button
+                                        onClick={() => {
+                                            if (records.length === 0) {
+                                                showToast('No hay datos para respaldar', 'warning');
+                                                return;
+                                            }
+                                            if (exportBackup(records)) {
+                                                showToast('✓ Respaldo creado exitosamente', 'success');
+                                            } else {
+                                                showToast('Error al crear el respaldo', 'error');
+                                            }
+                                        }}
+                                        className="w-full flex items-center justify-center gap-2 px-4 py-4 bg-blue-500/20 rounded-xl text-sm font-bold text-blue-400 border border-blue-500/30 hover:bg-blue-500/30 transition-all"
+                                    >
+                                        <Download size={20} /> Exportar Respaldo (JSON)
+                                    </button>
+                                    <button
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="w-full flex items-center justify-center gap-2 px-4 py-4 bg-amber-500/20 rounded-xl text-sm font-bold text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 transition-all"
+                                    >
+                                        <Upload size={20} /> Importar Respaldo
+                                    </button>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept=".json"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) {
+                                                importBackup(file, setRecords, showToast);
+                                            }
+                                            e.target.value = '';
+                                        }}
+                                        className="hidden"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Navegación Inferior - Rediseñada */}
+                    <nav className="fixed bottom-0 left-0 right-0 glass-effect h-20 flex justify-around items-center px-4 z-50 border-t border-dark-border">
                         <button 
                             onClick={() => setActiveTab('dashboard')} 
-                            className={`flex flex-col items-center gap-1.5 w-1/4 transition-all group ${activeTab === 'dashboard' ? 'text-emerald-400' : 'text-gray-600'}`}
+                            className={`flex flex-col items-center gap-1.5 flex-1 transition-all group ${activeTab === 'dashboard' ? 'text-emerald-400' : 'text-gray-600'}`}
                         >
-                           <div className={`w-11 h-8 rounded-xl flex items-center justify-center transition-all ${activeTab === 'dashboard' ? 'bg-emerald-500/20 scale-110' : 'group-hover:bg-dark-hover'}`}>
-                               <LayoutDashboard size={20} />
+                           <div className={`w-12 h-10 rounded-xl flex items-center justify-center transition-all ${activeTab === 'dashboard' ? 'bg-emerald-500/20 scale-110' : 'group-hover:bg-dark-hover'}`}>
+                               <LayoutDashboard size={22} />
                            </div>
-                           <span className="text-[9px] font-bold uppercase tracking-wider">Resumen</span>
+                           <span className="text-[10px] font-bold uppercase tracking-wider">Resumen</span>
                         </button>
+                        
+                        {/* Botón central de acción rápida */}
                         <button 
                             onClick={() => {
                                 setActiveTab('calendar');
-                                setViewMode('calendar');
+                                setViewMode('form');
+                                setEditingId(null);
+                                setFormData(initialFormData);
                             }} 
-                            className={`flex flex-col items-center gap-1.5 w-1/4 transition-all group ${activeTab === 'calendar' ? 'text-emerald-400' : 'text-gray-600'}`}
+                            className="relative -mt-8"
                         >
-                           <div className={`w-11 h-8 rounded-xl flex items-center justify-center transition-all ${activeTab === 'calendar' ? 'bg-emerald-500/20 scale-110' : 'group-hover:bg-dark-hover'}`}>
-                               <Calendar size={20} />
-                           </div>
-                           <span className="text-[9px] font-bold uppercase tracking-wider">Calendario</span>
+                            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-2xl flex items-center justify-center hover:scale-110 transition-transform active:scale-95">
+                                <Plus size={32} className="text-white" strokeWidth={3} />
+                            </div>
+                            <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-20 h-1 bg-emerald-500/30 rounded-full blur-sm"></div>
                         </button>
+                        
                         <button 
                             onClick={() => {
                                 setActiveTab('history');
                                 setIsMultiSelectMode(false);
                                 setSelectedRecords([]);
+                                setFilterCommissionsOnly(false);
+                                setFilterExpensesOnly(false);
                             }} 
-                            className={`flex flex-col items-center gap-1.5 w-1/4 transition-all group ${activeTab === 'history' ? 'text-emerald-400' : 'text-gray-600'}`}
+                            className={`flex flex-col items-center gap-1.5 flex-1 transition-all group ${activeTab === 'history' ? 'text-emerald-400' : 'text-gray-600'}`}
                         >
-                           <div className={`w-11 h-8 rounded-xl flex items-center justify-center transition-all ${activeTab === 'history' ? 'bg-emerald-500/20 scale-110' : 'group-hover:bg-dark-hover'}`}>
-                               <HistoryIcon size={20} />
+                           <div className={`w-12 h-10 rounded-xl flex items-center justify-center transition-all ${activeTab === 'history' ? 'bg-emerald-500/20 scale-110' : 'group-hover:bg-dark-hover'}`}>
+                               <HistoryIcon size={22} />
                            </div>
-                           <span className="text-[9px] font-bold uppercase tracking-wider">Historial</span>
-                        </button>
-                        <button 
-                            onClick={() => setActiveTab('more')} 
-                            className={`flex flex-col items-center gap-1.5 w-1/4 transition-all group ${activeTab === 'more' ? 'text-emerald-400' : 'text-gray-600'}`}
-                        >
-                           <div className={`w-11 h-8 rounded-xl flex items-center justify-center transition-all ${activeTab === 'more' ? 'bg-emerald-500/20 scale-110' : 'group-hover:bg-dark-hover'}`}>
-                               <MoreHorizontal size={20} />
-                           </div>
-                           <span className="text-[9px] font-bold uppercase tracking-wider">Más</span>
+                           <span className="text-[10px] font-bold uppercase tracking-wider">Historial</span>
                         </button>
                     </nav>
                 </div>
