@@ -67,14 +67,14 @@ PWA (Progressive Web App) de un solo archivo HTML que funciona offline en cualqu
 | **LocalStorage** | Persistencia de datos offline |
 | **Service Worker** | Caché offline (PWA) |
 
-**Archivo único** — Todo el código (HTML, CSS, JS, React) está contenido en `index-3.html` (~306 KB, ~4,500 líneas).
+**Archivo único** — Todo el código (HTML, CSS, JS, React) está contenido en `index.html` (~306 KB, ~4,600 líneas).
 
 ---
 
 ## 📱 Instalación
 
 ### Opción 1: Uso directo
-1. Descarga `index-3.html`
+1. Descarga `index.html`
 2. Ábrelo en cualquier navegador móvil o de escritorio
 3. Listo — funciona sin conexión a internet
 
@@ -84,7 +84,7 @@ PWA (Progressive Web App) de un solo archivo HTML que funciona offline en cualqu
 3. La app aparecerá como ícono en tu dispositivo
 
 ### Opción 3: Hosting (GitHub Pages)
-1. Sube `index-3.html` como `index.html` a un repositorio
+1. Sube `index.html` a un repositorio
 2. Activa GitHub Pages en Settings → Pages → Branch: main
 3. Accede desde `https://tu-usuario.github.io/tu-repo/`
 
